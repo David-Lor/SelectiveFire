@@ -1,9 +1,7 @@
 ﻿using GTA;
 using GTA.Native;
-using GTA.Math;
 using System;
 using System.Windows.Forms;
-using System.Runtime.InteropServices; //simulate mouse clicks
 using System.Drawing; //print external images on game
 
 public class SelectiveFire : Script
@@ -22,11 +20,6 @@ public class SelectiveFire : Script
         private Keys ChangeFireModeHotkey_Keys;
         private bool ActivateSelectiveFire, ShowImage, AutoHideImage, StealthIfPlayerAiming, StealthAutoDisable, WasteAmmo, ShowNotif, BreathAimMovement, ShakeWhenAim;
         private int ImageShownTime, ImageWidth, ImageHeight, BreathMovementRate, ShakeWhenAimMovementRate;
-
-    //FOR MOUSE CLICK SIMULATION
-        [DllImport("user32.dll")]
-        static extern void mouse_event(int dwFlags, int dx, int dy, int dwData, int dwExtraInfo);
-        private const int MOUSEEVENTF_MOVE = 0x0001, MOUSEEVENTF_LEFTDOWN = 0x0002, MOUSEEVENTF_LEFTUP = 0x0004, MOUSEEVENTF_RIGHTDOWN = 0x0008, MOUSEEVENTF_RIGHTUP = 0x0010, MOUSEEVENTF_MIDDLEDOWN = 0x0020, MOUSEEVENTF_MIDDLEUP = 0x0040, MOUSEEVENTF_ABSOLUTE = 0x8000;
 
     public SelectiveFire()
     {
