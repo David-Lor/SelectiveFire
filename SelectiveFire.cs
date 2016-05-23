@@ -7,8 +7,8 @@ using System.Drawing; //print external images on game
 public class SelectiveFire : Script
 {
     //LOCAL VARIABLES for the whole script
-        private int fireMode = 1, //1= full auto, 2= semi-auto, 3=burst (3 shots)
-        ammo, /*prevammo,*/ ammocount;
+        private int fireMode = 1, //0=full auto, 1=semi-auto, 2=burst (3-shots), 3=burst (2-shots)
+        ammo, ammocount;
         private bool capableWeapon = false, firemodechanged = false, showImg = false, stealth, stealthLaunchIfPlayerAiming = false, playerreloaded = false, breathshaking = false, aimshaking = false;
         private string firemodeImgRoot = AppDomain.CurrentDomain.BaseDirectory + "\\SelectiveFire\\", firemodeImg;
         private Weapon previousWeapon;
@@ -19,7 +19,8 @@ public class SelectiveFire : Script
         private ScriptSettings config;
         private Keys ChangeFireModeHotkey_Keys;
         private bool ActivateSelectiveFire, ShowImage, AutoHideImage, StealthIfPlayerAiming, StealthAutoDisable, WasteAmmo, ShowNotif, BreathAimMovement, ShakeWhenAim;
-        private int ImageShownTime, ImageWidth, ImageHeight, BreathMovementRate, ShakeWhenAimMovementRate;
+        private int ShotsPerBurst, ImageShownTime, ImageWidth, ImageHeight, BreathMovementRate, ShakeWhenAimMovementRate;
+        
 
     public SelectiveFire()
     {
@@ -30,8 +31,8 @@ public class SelectiveFire : Script
         //Pick up configs from INI file
             config = ScriptSettings.Load("scripts\\SelectiveFire.ini");
             string ChangeFireModeHotkey_String = config.GetValue<string>("HOTKEYS", "ChangeFireMode", "N");
-            string StealthModeHotkey_String = config.GetValue<string>("HOTKEYS", "StealthMode", "P");
             ActivateSelectiveFire = config.GetValue<bool>("SELECTIVEFIRE", "SelectiveFire", true);
+	        ShotsPerBurst = config.GetValue<int>("SELECTIVEFIRE", "ShotsPerBurst", 3);
             ShowImage = config.GetValue<bool>("NOTIFICATIONS", "ShowImage", true);
             AutoHideImage = config.GetValue<bool>("NOTIFICATIONS", "AutoHideImage", true);
             ImageShownTime = config.GetValue<int>("NOTIFICATIONS", "ImageShownTime", 3);
@@ -46,7 +47,6 @@ public class SelectiveFire : Script
             BreathMovementRate = config.GetValue<int>("REALLISTICAIMING", "BreathMovementRate", 1);
             ShakeWhenAim = config.GetValue<bool>("REALLISTICAIMING", "ShakeWhenAim", false);
             ShakeWhenAimMovementRate = config.GetValue<int>("REALLISTICAIMING", "ShakeWhenAimMovementRate", 1);
-
 
         //Hotkeys (String from INI to Enum-Keys)
             Enum.TryParse(ChangeFireModeHotkey_String, out ChangeFireModeHotkey_Keys);
@@ -64,6 +64,7 @@ public class SelectiveFire : Script
             capableWeapon = true;
 
             //LAUNCH Selective Fire Modes
+
                 if (fireMode == 1) {
                     firemodeImg = firemodeImgRoot + "fullauto.png";
                 }
@@ -73,7 +74,7 @@ public class SelectiveFire : Script
                 }
                 else if (fireMode == 3) {
                     firemodeImg = firemodeImgRoot + "burst3.png";
-                    BurstMode();
+                    BurstMode(ShotsPerBurst);
                 }
 
             //Draw on screen a image showing the actual fire mode for X seconds, if fire mode changed
@@ -138,8 +139,48 @@ public class SelectiveFire : Script
         }
 
         //REALLISTICAIMING MODULE
-        if (BreathAimMovement) { BreathAimModule(); }
-        if (ShakeWhenAim) { ShakeWhenAimModule(); }
+        if (ShakeWhenAim && !BreathAimMovement)
+        { //Shake "Jolt" effect - just applies when start aiming, moving the camera
+            if (Game.Player.IsAiming && !aimshaking) {
+                GameplayCamera.Shake(GTA.CameraShake.Jolt, (0.1f * ShakeWhenAimMovementRate));
+                aimshaking = true; //avoid shake function to run more than once
+            }
+            else if (!Game.Player.IsAiming) {
+                aimshaking = false;
+            }
+        }
+
+        if (BreathAimMovement && !ShakeWhenAim)
+        { //Shake "Hand" effect - when you're aiming the camera moves like if breathing
+            if (Game.Player.IsAiming && !breathshaking) {
+                GameplayCamera.Shake(GTA.CameraShake.Hand, (0.1f * BreathMovementRate));
+                breathshaking = true; //avoid shake running more than once
+            }
+            else if (!Game.Player.IsAiming) {
+                GameplayCamera.StopShaking();
+                breathshaking = false;
+            }
+        }
+
+        
+        if (BreathAimMovement && ShakeWhenAim)
+        { //Both Shake effects
+            if (Game.Player.IsAiming) {
+                if (!aimshaking) { //apply aim shake only once
+                    GameplayCamera.Shake(GTA.CameraShake.Jolt, (0.1f * ShakeWhenAimMovementRate));
+                    aimshaking = true;
+                }
+                else if (!GameplayCamera.IsShaking) { //apply breath shake when breath shake finished
+                    GameplayCamera.Shake(GTA.CameraShake.Hand, (0.1f * BreathMovementRate));
+                    breathshaking = true;
+                }
+            }
+            else if (aimshaking || breathshaking) {
+                GameplayCamera.StopShaking();
+                aimshaking = false;
+                breathshaking = false;
+            }
+        }
 
         previousWeapon = actualWeapon;
     }
@@ -155,7 +196,7 @@ public class SelectiveFire : Script
             }
             else if (fireMode == 2) { //SEMI-AUTO to BURST
                 fireMode = 3;
-                if (ShowNotif) {UI.Notify("Fire mode: BURST");}
+                if (ShowNotif) {UI.Notify("Fire mode: BURST - x" + ShotsPerBurst);}
                 firemodechanged = true;
             }
             else if (fireMode == 3) { //BURST to FULL-AUTO
@@ -164,26 +205,25 @@ public class SelectiveFire : Script
                 firemodechanged = true;
             }
         }
-    }
+    }   
 
-    private void BurstMode()
+    private void BurstMode(int SpB)
     { //Script for Burst Fire Mode
         if (player.IsShooting) {
             ammocount++;
         }
-        if (ammocount == 1 || ammocount == 2) {
+	    if (ammocount < SpB && ammocount > 0) {
             Game.SetControlNormal(0, GTA.Control.Attack, 1.0f);
             if (player.IsAimingFromCover) {
                 Game.SetControlNormal(0, GTA.Control.Aim, 1.0f);
             }
         }
-        if (ammocount == 3) {
+        if (ammocount == SpB) {
             Game.Player.DisableFiringThisFrame();
             if (GTA.Game.IsControlJustReleased(0, GTA.Control.Attack)) {
                 ammocount = 0;
             }
         }
-        //prevammo = ammo;
     }
 
     private void SemiAutoMode()
@@ -194,30 +234,5 @@ public class SelectiveFire : Script
     }
 
     private void StealthMode(bool sth)
-    {
-        GTA.Native.Function.Call(GTA.Native.Hash.SET_PED_STEALTH_MOVEMENT, player, sth, 0);
-    }
-
-    private void BreathAimModule()
-    { //Shake "Hand" effect - when you're aiming the camera moves like if breathing
-        if (Game.Player.IsAiming && !breathshaking) {
-            GameplayCamera.Shake(GTA.CameraShake.Hand, (0.1f * BreathMovementRate));
-            breathshaking = true;
-        }
-        else if (!Game.Player.IsAiming) { //avoid shake running more than once
-            GameplayCamera.StopShaking();
-            breathshaking = false;
-        }
-    }
-
-    private void ShakeWhenAimModule() 
-    { //Shake "Jolt" effect - just applies when start aiming, moving the camera
-        if (Game.Player.IsAiming && !aimshaking) {
-            GameplayCamera.Shake(GTA.CameraShake.Jolt, (0.1f * ShakeWhenAimMovementRate));
-            aimshaking = true;
-        }
-        else if (!Game.Player.IsAiming) { //avoid shake running more than once
-            aimshaking = false;
-        }
-    }
+    { GTA.Native.Function.Call(GTA.Native.Hash.SET_PED_STEALTH_MOVEMENT, player, sth, 0); }
 }
